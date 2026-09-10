@@ -1,6 +1,6 @@
 # AD5672R SPI example
 
-The FreeRTOS main thread initializes VOUT0 to code 0 (nominally 0 V).
+The FreeRTOS control task initializes VOUT0 to code 0 (nominally 0 V).
 It holds the output until a valid decimal voltage is entered over USB serial.
 Accepted commands are **0 to 2.5 V**, with up to three decimal places.
 Type, for example, `1.250` and press Enter. Invalid commands leave the output
@@ -9,7 +9,7 @@ unchanged. The ADC reading refreshes every second while you type.
 The terminal displays an updating line such as:
 
 ```text
-ADC: 1.247 V | DAC set: 1.250 V | volts> 2.
+PA27:1.247V PA26:100.708mV I:41.152mA | DAC:1.250V | volts> 2.
 ```
 
 The partial command survives each refresh. Use an ANSI/VT100-compatible
@@ -38,12 +38,12 @@ For gain 1, `VOUT = 2.5 V * code / 4096`. Entered voltages are converted to
 12-bit codes using that reference, not 3.3 V. Entering 2.5 selects code 4095:
 the ideal output is approximately **2.4994 V**, before offset/gain errors.
 Code zero gives nominal 0 V, subject to the DAC's zero-code offset.
-`DAC_GAIN` and `DAC_COMMAND_MAX_MV` in `terminal.c` match the current wiring.
+`DAC_FULL_SCALE_MV` and `DAC_COMMAND_MAX_MV` in `app_tasks.h` match the current wiring.
 The TSSOP's gain is set physically; changing a software constant cannot change
 it. A 3.3 V output would require different supply/gain wiring.
 
 These are DAC setpoints, not closed-loop LDO output targets. The ADC independently
-measures PA27; firmware does not adjust the DAC based on that reading.
+measures PA27 and PA26; firmware does not adjust the DAC based on that reading.
 
 Call `AD5672R_init()` once from a running task after `SYSCFG_DL_init()` and
 before other tasks access the DAC. Call `AD5672R_write(channel, code)` for
@@ -78,27 +78,62 @@ receive error is rejected as a whole, so a truncated command is never applied.
 After a receive error, press Enter and retype the voltage. Avoid bulk streaming;
 this console is intended for human-entered commands.
 
-Host-side command tests: `python3 MSPM0_DC_Board/tests/test_voltage_console.py`.
-They cover parsing, limits, DAC conversion, editing, CRLF, oversized lines,
-receive errors, failed DAC writes, and preservation of input during redraw.
-
 ## Source organization and tasks
 
-- `main.c`: only the application thread, startup order, one-second ADC schedule,
-  and servicing/redrawing the terminal.
-- `terminal.c` / `terminal.h`: UART0 setup and receive interrupt, input buffering,
-  command editing/validation, DAC command dispatch, and terminal display.
-- `feedback_adc.c` / `feedback_adc.h`: PA27/ADC0 setup and voltage conversion.
+- `main.c`: control/measurement task (`mainThread`), priority 2. Owns DAC/SPI and
+  ADC hardware, initializes DAC0 to zero, applies queued commands, and samples
+  PA27 and PA26 once per second.
+- `terminal.c` / `terminal.h`: communications task (`Terminal_task`), priority 1.
+  Owns UART0, command editing/validation and screen output. UART reception is
+  interrupt-driven and feeds its existing byte buffer.
+- `app_tasks.c` / `app_tasks.h`: creates both tasks and their queues before the
+  scheduler starts; defines setpoint/result/measurement messages and voltage limits.
+- `feedback_adc.c` / `feedback_adc.h`: PA27/PA26/ADC0 setup and voltage conversion.
+- `current_sense.h`: PA26-to-output-current conversion using the sense ratio and
+  amplifier resistor values.
 - `ad5672r.c` / `ad5672r.h`: DAC SPI protocol and hardware initialization.
+- `main_freertos.c`: hardware startup, task creation and FreeRTOS hooks.
 
-There is one application task, created by `main_freertos.c`. UART RX runs in an
-interrupt handler and buffers bytes while the task handles SPI, ADC, and UART TX.
-The task processes input about every 10 ms and schedules ADC measurements every
-second. UART TX and SPI writes are blocking; the receive interrupt stays active.
-Keep `Terminal_*` and `FeedbackADC_*` calls in this one owning task. The DAC driver
-already serializes its public writes using a FreeRTOS mutex.
+The two application tasks use native FreeRTOS static allocation: the control
+stack is 1024 bytes and the communications stack is 2048 bytes. Priorities are
+relative to idle (0); larger numbers have higher priority. There is no POSIX
+application-thread wrapper now. FreeRTOS's own idle/timer tasks remain.
 
-Separate UART/DAC tasks are unnecessary for this interactive workload. A future
-fast regulation loop should get a dedicated control task with setpoints passed
-from the console through a queue; terminal formatting should stay outside that
-loop. This change does not add tasks or alter control behavior.
+A command queue sends a channel and requested millivolts from communications to
+control. A result queue carries the SPI result back. One command may be in flight:
+a second Enter before acknowledgement is rejected with a message, never silently
+substituted for the first command. The display marks the request `pending` and
+updates its DAC setpoint only after a successful response. Success means the MCU
+completed the SPI transfer; it is not readback confirmation from the DAC.
+
+A separate one-item measurement mailbox always contains the latest ADC sample.
+The control task overwrites it without waiting for the terminal, so slow text
+output cannot fill a telemetry queue and delay sampling. Intermediate readings
+can be skipped by a stalled terminal. The console waits for the control task's
+initialization report before accepting input.
+
+The control task blocks on the command queue until either a command arrives or
+the next ADC deadline expires. It checks the ADC deadline between commands, so
+command traffic cannot indefinitely postpone sampling. A sample can be delayed
+by a transfer already in progress or higher-priority interrupts; this is not a
+hard real-time sampling guarantee. UART formatting and TX run only in the lower
+priority communications task. Its input/display service interval is about 10 ms.
+The task-owned state is copied through queues; volatile debug variables are
+written only by the communications task, not used for cross-task synchronization.
+
+This implements the task separation for the existing single DAC output and two ADC
+inputs. Channel 0 is the only accepted channel. The future 24-channel mux, scan
+sequence and GUI protocol are not implemented. They can extend the control task
+and message structures without moving hardware access into the terminal task.
+
+Validation commands:
+
+```sh
+python3 MSPM0_DC_Board/tests/test_voltage_console.py
+python3 MSPM0_DC_Board/tests/test_control_tasks.py
+python3 MSPM0_DC_Board/tests/test_feedback_adc.py
+```
+
+The host tests exercise asynchronous acknowledgements, queue backpressure,
+startup at zero, ADC scheduling under command traffic, failure handling and tick
+counter wrap. Hardware/RTOS timing still requires testing on the LaunchPad.

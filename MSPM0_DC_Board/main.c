@@ -32,36 +32,55 @@
 
 #include <FreeRTOS.h>
 #include <task.h>
+#include "app_tasks.h"
 #include "ad5672r.h"
 #include "feedback_adc.h"
-#include "terminal.h"
+#include "voltage_input.h"
 
-/* One application task owns commands, DAC updates, ADC scheduling and display.
- * UART reception remains interrupt-driven inside terminal.c.
- */
-void *mainThread(void *arg0)
+/* Higher-priority control task: sole owner of SPI/DAC and ADC hardware. */
+void mainThread(void *arg0)
 {
     (void)arg0;
-    /* RSTSEL is grounded; program DAC0 zero before accepting input. */
-    bool dacReady = AD5672R_init();
-    if (dacReady) dacReady = AD5672R_write(0, 0);
+    Measurement measurement = {0};
+    measurement.dacReady = AD5672R_init();
+    if (measurement.dacReady) measurement.dacReady = AD5672R_write(0, 0);
     FeedbackADC_init();
-    Terminal_init(dacReady);
+    /* Releases the console only after zero-output initialization completes. */
+    xQueueOverwrite(appMeasurementQueue, &measurement);
 
+    const TickType_t period = pdMS_TO_TICKS(1000);
     TickType_t lastADC = xTaskGetTickCount();
     for (;;) {
-        bool redraw = Terminal_processInput();
         TickType_t now = xTaskGetTickCount();
-        if ((TickType_t)(now - lastADC) >= pdMS_TO_TICKS(1000)) {
-            lastADC += pdMS_TO_TICKS(1000);
-            uint16_t raw = 0;
-            uint32_t mv = 0;
-            bool success = FeedbackADC_read(&raw, &mv);
-            Terminal_setADC(success, raw, mv);
-            if (!success) FeedbackADC_init();
-            redraw = true;
+        if ((TickType_t)(now - lastADC) >= period) {
+            /* Skip missed periods rather than burst-sampling after a long halt. */
+            lastADC += ((TickType_t)(now - lastADC) / period) * period;
+            measurement.adcValid = FeedbackADC_read(measurement.raw, measurement.millivolts);
+            measurement.adcError = !measurement.adcValid;
+            if (!measurement.adcValid) {
+                FeedbackADC_init();
+            }
+            /* Never wait for a slow terminal; it receives the latest sample. */
+            xQueueOverwrite(appMeasurementQueue, &measurement);
         }
-        if (redraw) Terminal_render();
-        vTaskDelay(pdMS_TO_TICKS(10));
+
+        now = xTaskGetTickCount();
+        TickType_t elapsed = now - lastADC;
+        TickType_t wait = elapsed < period ? period - elapsed : 0;
+        SetpointCommand command;
+        if (xQueueReceive(appCommandQueue, &command, wait) == pdTRUE) {
+            SetpointResult result = {.command = command, .code = 0, .success = false};
+            /* Validate again at the hardware boundary. Only channel 0 exists now. */
+            if (measurement.dacReady && command.channel == 0 &&
+                command.millivolts <= DAC_COMMAND_MAX_MV) {
+                result.code = voltageToCode(command.millivolts, DAC_FULL_SCALE_MV);
+                result.success = AD5672R_write(command.channel, result.code);
+                if (!result.success) measurement.dacReady = false;
+            }
+            /* App_submitSetpoint permits one outstanding request. The reply
+             * slot is therefore free; publishing never blocks ADC scheduling.
+             */
+            xQueueOverwrite(appResultQueue, &result);
+        }
     }
 }

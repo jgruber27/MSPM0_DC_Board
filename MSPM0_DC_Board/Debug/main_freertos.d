@@ -1,12 +1,6 @@
 # FIXED
 
 main_freertos.o: ../main_freertos.c \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/pthread.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sys/types.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sys/_internal.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/time.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/signal.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sched.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/FreeRTOS.h \
  /home/jim/workspace_ccstheia/freertos_builds_LP_MSPM0G3519_release_ticlang/FreeRTOSConfig.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/freertos/PTLS.h \
@@ -101,13 +95,9 @@ main_freertos.o: ../main_freertos.c \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/dl_wwdt.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/m0p/dl_interrupt.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/m0p/dl_systick.h \
- ../ti_msp_dl_config.h
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/pthread.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sys/types.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sys/_internal.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/time.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/signal.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/ticlang/sched.h:
+ ../ti_msp_dl_config.h ../app_tasks.h \
+ /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h \
+ ../feedback_adc.h
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/FreeRTOS.h:
 /home/jim/workspace_ccstheia/freertos_builds_LP_MSPM0G3519_release_ticlang/FreeRTOSConfig.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/freertos/PTLS.h:
@@ -203,3 +193,6 @@ main_freertos.o: ../main_freertos.c \
 /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/m0p/dl_interrupt.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/m0p/dl_systick.h:
 ../ti_msp_dl_config.h:
+../app_tasks.h:
+/home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h:
+../feedback_adc.h:

@@ -1,6 +1,6 @@
 # FIXED
 
-main.o: ../main.c \
+app_tasks.o: ../app_tasks.c ../app_tasks.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/FreeRTOS.h \
  /home/jim/workspace_ccstheia/freertos_builds_LP_MSPM0G3519_release_ticlang/FreeRTOSConfig.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/freertos/PTLS.h \
@@ -9,11 +9,11 @@ main.o: ../main.c \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/deprecated_definitions.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/portable/TI_ARM_CLANG/ARM_CM0/portmacro.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/mpu_wrappers.h \
+ /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/task.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/list.h \
- ../app_tasks.h \
- /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h \
- ../feedback_adc.h ../ad5672r.h ../voltage_input.h
+ ../feedback_adc.h ../terminal.h
+../app_tasks.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/FreeRTOS.h:
 /home/jim/workspace_ccstheia/freertos_builds_LP_MSPM0G3519_release_ticlang/FreeRTOSConfig.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/posix/freertos/PTLS.h:
@@ -22,10 +22,8 @@ main.o: ../main.c \
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/deprecated_definitions.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/portable/TI_ARM_CLANG/ARM_CM0/portmacro.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/mpu_wrappers.h:
+/home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/task.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/list.h:
-../app_tasks.h:
-/home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h:
 ../feedback_adc.h:
-../ad5672r.h:
-../voltage_input.h:
+../terminal.h:

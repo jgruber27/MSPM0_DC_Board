@@ -11,7 +11,10 @@ terminal.o: ../terminal.c \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/mpu_wrappers.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/task.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/list.h \
- ../ad5672r.h ../voltage_input.h ../terminal.h ../ti_msp_dl_config.h \
+ ../app_tasks.h \
+ /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h \
+ ../feedback_adc.h ../voltage_input.h ../current_sense.h ../terminal.h \
+ ../ti_msp_dl_config.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/msp.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/devices/DeviceFamily.h \
  /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/m0p/mspm0g351x.h \
@@ -106,8 +109,11 @@ terminal.o: ../terminal.c \
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/mpu_wrappers.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/task.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/list.h:
-../ad5672r.h:
+../app_tasks.h:
+/home/jim/ti/mspm0_sdk_2_11_00_07/kernel/freertos/Source/include/queue.h:
+../feedback_adc.h:
 ../voltage_input.h:
+../current_sense.h:
 ../terminal.h:
 ../ti_msp_dl_config.h:
 /home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/msp.h:

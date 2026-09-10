@@ -1,22 +1,29 @@
-# LDO output monitoring on PA27
+# Voltage monitoring on PA27 and PA26
 
-`feedback_adc.c` configures PA27 (PINCM60) as ADC0 channel 0, with its digital input
-and output circuitry disconnected. It performs a software-triggered 12-bit
-conversion once per second and sends the measured pin voltage over UART0.
-The DAC starts at nominal 0 V and changes only after a valid user voltage
-command (0–2.5 V). ADC sampling continues independently while you type.
-This is monitoring only: the measurement does not regulate the DAC setting.
+`feedback_adc.c` configures PA27 (PINCM60, ADC0 channel 0) and PA26
+(PINCM59, ADC0 channel 1) as analog inputs, disconnecting their digital circuitry.
+The control task triggers one 12-bit sequence each second: PA27 is sampled first,
+then PA26, with 125 us acquisition time for each. The pair is published only
+when the second conversion finishes; these are sequential, not simultaneous,
+measurements. A sequence timeout marks the pair invalid and reinitializes ADC0.
+
+Both values travel in one measurement message to the communications task. The
+DAC starts at nominal 0 V and changes only after a valid user command (0–2.5 V).
+ADC sampling continues independently while you type. This is monitoring only:
+the measurement does not regulate the DAC setting.
 
 The ADC reference is the MCU supply, assumed to be 3300 mV. Set
-`ADC_REFERENCE_MV` in `feedback_adc.c` to the measured supply for better accuracy.
-Conversion uses `raw * reference_mV / 4096`, rounded to the nearest millivolt.
+`ADC_REFERENCE_MV` in `feedback_adc.h` to the measured supply for better accuracy.
+PA27 uses `raw * reference_mV / 4096`, rounded to the nearest millivolt.
+PA26 is displayed in mV with three decimal places, calculated from the raw
+code without first rounding to whole mV.
 The driver uses 125 us acquisition time at the existing 32 MHz ULPCLK.
 
-Connect the LDO ground to LaunchPad ground. A direct connection is valid only
-while PA27 stays between ground and the MCU supply (nominally 3.3 V), including
+Connect both measured circuit grounds to LaunchPad ground. A direct connection is valid only
+while both PA27 and PA26 stay between ground and the MCU supply (nominally 3.3 V), including
 startup and transitions. For higher LDO outputs, use a resistor divider sized
 for the maximum output and scale the reported voltage by the divider ratio.
-The current code reports voltage at PA27 with no divider compensation.
+The current code reports voltage at each ADC pin with no divider compensation.
 
 ## Serial terminal
 
@@ -37,7 +44,7 @@ The same status/prompt line refreshes once per second and whenever you edit the
 command. For example, while typing a new setpoint:
 
 ```text
-ADC: 1.247 V | DAC set: 1.250 V | volts> 2.
+PA27:1.247V PA26:100.708mV I:41.152mA | DAC:1.250V | volts> 2.
 ```
 
 Backspace edits; Ctrl-U or Ctrl-C clears the input. Invalid values leave the
@@ -47,8 +54,8 @@ Actual readings depend on the LDO circuit and ADC/reference errors. Text goes
 to the USB serial port, not the CCS build/debug console; no semihosting is used.
 Opening the terminal after boot still shows subsequent readings every second.
 
-`adcRaw`, `adcMillivolts`, `adcError`, and `dacError` are also visible in the
-debugger. On an ADC timeout, the terminal reports an error and the ADC is
+`adcRaw[2]`, `adcMillivolts[2]`, `adcError`, and `dacError` are visible in the
+debugger. Array index 0 is PA27; index 1 is PA26. On an ADC timeout, the terminal reports an error and the ADC is
 reinitialized for the next reading. Code 4095 is marked `FULL`; it
 cannot tell how far above the reference an input may be. DAC failures prevent
 further DAC writes while ADC reporting continues.
@@ -56,3 +63,41 @@ further DAC writes while ADC reporting continues.
 References: [LaunchPad user guide](https://www.ti.com/lit/ug/slau947/slau947.pdf)
 for pin routing and jumpers; [MSPM0G3519 data sheet](https://www.ti.com/lit/ds/symlink/mspm0g3519.pdf)
 for ADC input limits.
+
+The control task publishes samples to a one-item queue that retains the latest
+reading. The communications task displays them; if it falls behind, intermediate
+readings may be skipped rather than blocking the ADC schedule. See
+[DAC_README.md](DAC_README.md#source-organization-and-tasks) for task ownership.
+
+Use a terminal at least 140 columns wide to accommodate both readings, a full
+input line and status indicators without wrapping. The normal idle line fits
+in 80 columns.
+
+## PA26 current-sense conversion
+
+PA26 is the amplified current-sense voltage. PA27 remains the LDO output-voltage
+measurement. The current displayed beside PA26 is the estimated **LDO output
+current**, not the smaller current through the sense resistor.
+
+Using the supplied circuit values:
+
+- Current-sense ratio: I_sense = I_output / 5000.
+- Sense resistor: 1000 ohms.
+- Noninverting amplifier: gain = 1 + Rf/Rg = 1 + 10000/890 = 12.235955...
+
+Thus `I_output[A] = V_PA26[V] * 5000 / (1000 * (1 + 10000/890))`.
+Equivalently, `I_output[mA] = V_PA26[mV] * 0.40863177...`.
+For example, 100 mV at PA26 represents about 40.863 mA of output current.
+
+`current_sense.h` contains the ratio/resistor constants and conversion. It uses
+64-bit integer intermediate values and rounds once to microamps, directly from
+the raw ADC code. The display prints mA with three decimal places. At ADC code
+4095, voltage is marked FULL and current SAT; the current is then a full-scale
+estimate rather than a valid measurement of any larger signal. An ADC timeout
+hides both voltages and current until a complete valid sample arrives.
+
+This change removes display rounding; it does not add ADC resolution. With a
+3.3 V reference, one 12-bit ADC count is 0.805664 mV, or about 0.329220 mA of
+output current. Extra displayed digits do not imply that level of accuracy.
+The conversion assumes ideal sense ratio, resistor values, amplifier gain and
+zero offset. No offset calibration or averaging has been added.

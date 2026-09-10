@@ -8,6 +8,7 @@ CMD_SRCS += \
 
 C_SRCS += \
 ../ad5672r.c \
+../app_tasks.c \
 ../feedback_adc.c \
 ../main.c \
 ../main_freertos.c \
@@ -17,6 +18,7 @@ C_SRCS += \
 
 C_DEPS += \
 ./ad5672r.d \
+./app_tasks.d \
 ./feedback_adc.d \
 ./main.d \
 ./main_freertos.d \
@@ -26,6 +28,7 @@ C_DEPS += \
 
 OBJS += \
 ./ad5672r.o \
+./app_tasks.o \
 ./feedback_adc.o \
 ./main.o \
 ./main_freertos.o \
@@ -35,6 +38,7 @@ OBJS += \
 
 OBJS__QUOTED += \
 "ad5672r.o" \
+"app_tasks.o" \
 "feedback_adc.o" \
 "main.o" \
 "main_freertos.o" \
@@ -44,6 +48,7 @@ OBJS__QUOTED += \
 
 C_DEPS__QUOTED += \
 "ad5672r.d" \
+"app_tasks.d" \
 "feedback_adc.d" \
 "main.d" \
 "main_freertos.d" \
@@ -53,6 +58,7 @@ C_DEPS__QUOTED += \
 
 C_SRCS__QUOTED += \
 "../ad5672r.c" \
+"../app_tasks.c" \
 "../feedback_adc.c" \
 "../main.c" \
 "../main_freertos.c" \

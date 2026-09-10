@@ -34,17 +34,12 @@
 #include <stdio.h>
 #include <FreeRTOS.h>
 #include <task.h>
-#include "ad5672r.h"
+#include "app_tasks.h"
 #include "voltage_input.h"
+#include "current_sense.h"
 #include "terminal.h"
 #include "ti_msp_dl_config.h"
 
-/* Must match physical GAIN wiring: grounded = 1, VLOGIC = 2.
- * Gain 2 additionally requires DAC VDD >= 4 V with the internal reference.
- */
-#define DAC_GAIN             1U
-#define DAC_FULL_SCALE_MV    (2500U * DAC_GAIN)
-#define DAC_COMMAND_MAX_MV   2500U
 #define RX_BUFFER_SIZE       128U
 #define COMMAND_SIZE         24U
 
@@ -55,6 +50,7 @@ static char command[COMMAND_SIZE];
 static unsigned int commandLength;
 static bool discardCommand, previousWasCR, adcValid;
 static uint32_t dacSetMillivolts;
+static bool setpointPending;
 
 /* No FreeRTOS calls in this ISR. Receive while ADC/terminal work is running. */
 void UART0_IRQHandler(void)
@@ -95,8 +91,8 @@ static int terminalRead(void)
 /* Inspect in the debugger if SPI initialization or a transfer fails. */
 volatile bool dacError = false;
 volatile bool adcError = false;
-volatile uint16_t adcRaw = 0;
-volatile uint32_t adcMillivolts = 0;
+volatile uint16_t adcRaw[FEEDBACK_ADC_COUNT] = {0};
+volatile uint32_t adcMillivolts[FEEDBACK_ADC_COUNT] = {0};
 
 static void terminalInit(void)
 {
@@ -134,7 +130,7 @@ static void terminalInit(void)
     DL_UART_Main_enable(UART0);
 }
 
-/* Only mainThread writes the terminal. No semihosting/debugger required. */
+/* Only the communications task writes the terminal. No semihosting/debugger required. */
 static void terminalWrite(const char *text)
 {
     while (*text != '\0') {
@@ -148,22 +144,32 @@ static void terminalWrite(const char *text)
 /* ANSI erase-and-redraw preserves the partially typed command during updates. */
 void Terminal_render(void)
 {
-    char line[128];
-    char adcText[32];
+    char line[192];
+    char adcText[96];
     if (adcError) {
-        (void)snprintf(adcText, sizeof(adcText), "ADC timeout");
+        (void)snprintf(adcText, sizeof(adcText), "PA27/PA26: ADC timeout");
     } else if (!adcValid) {
-        (void)snprintf(adcText, sizeof(adcText), "ADC: waiting");
+        (void)snprintf(adcText, sizeof(adcText), "PA27:-- PA26:--mV I:--mA");
     } else {
-        (void)snprintf(adcText, sizeof(adcText), "ADC: %lu.%03lu V%s",
-            (unsigned long)(adcMillivolts / 1000U),
-            (unsigned long)(adcMillivolts % 1000U),
-            adcRaw == 4095U ? " FULL" : "");
+        const uint16_t senseRaw = adcRaw[FEEDBACK_ADC_PA26];
+        const uint32_t microvolts = FeedbackADC_rawToMicrovolts(senseRaw);
+        const uint32_t microamps = CurrentSense_rawToMicroamps(senseRaw);
+        (void)snprintf(adcText, sizeof(adcText),
+            "PA27:%lu.%03luV%s PA26:%lu.%03lumV%s I:%lu.%03lumA%s",
+            (unsigned long)(adcMillivolts[FEEDBACK_ADC_PA27] / 1000U),
+            (unsigned long)(adcMillivolts[FEEDBACK_ADC_PA27] % 1000U),
+            adcRaw[FEEDBACK_ADC_PA27] == 4095U ? " FULL" : "",
+            (unsigned long)(microvolts / 1000U),
+            (unsigned long)(microvolts % 1000U),
+            senseRaw == 4095U ? " FULL" : "",
+            (unsigned long)(microamps / 1000U),
+            (unsigned long)(microamps % 1000U),
+            senseRaw == 4095U ? " SAT" : "");
     }
     (void)snprintf(line, sizeof(line),
-        "\r\033[2K%s | DAC set: %lu.%03lu V%s | volts> %s%s",
+        "\r\033[2K%s | DAC:%lu.%03luV%s | volts> %s%s",
         adcText, (unsigned long)(dacSetMillivolts / 1000U),
-        (unsigned long)(dacSetMillivolts % 1000U), dacError ? " ERROR" : "",
+        (unsigned long)(dacSetMillivolts % 1000U), dacError ? " ERROR" : (setpointPending ? " pending" : ""),
         command, discardCommand ? " [invalid; press Enter]" : "");
     terminalWrite(line);
 }
@@ -187,19 +193,10 @@ static void submitCommand(void)
         terminalMessage(message);
     } else if (dacError) {
         terminalMessage("DAC unavailable: restart to reinitialize. Command not applied.");
+    } else if (!App_submitSetpoint(0, mv)) {
+        terminalMessage("Previous command pending. Wait for its result, then re-enter the voltage.");
     } else {
-        uint16_t code = voltageToCode(mv, DAC_FULL_SCALE_MV);
-        dacError = !AD5672R_write(0, code);
-        if (dacError) {
-            terminalMessage("SPI transfer failed; DAC output is unconfirmed. Restart to retry.");
-        } else {
-            dacSetMillivolts = mv;
-            (void)snprintf(message, sizeof(message),
-                "DAC0 set to %lu.%03lu V (code %u)%s",
-                (unsigned long)(mv / 1000U), (unsigned long)(mv % 1000U),
-                (unsigned int)code, code == 4095U ? " [maximum code]" : "");
-            terminalMessage(message);
-        }
+        setpointPending = true;
     }
     commandLength = 0;
     command[0] = '\0';
@@ -236,7 +233,7 @@ static void handleCharacter(int ch)
     }
 }
 
-/* Called once by the application task, after DAC initialization. */
+/* Communications task starts the UART after the control task initializes. */
 void Terminal_init(bool dacReady)
 {
     dacError = !dacReady;
@@ -265,12 +262,58 @@ bool Terminal_processInput(void)
     return changed;
 }
 
-void Terminal_setADC(bool success, uint16_t raw, uint32_t millivolts)
+void Terminal_setADC(bool success, const uint16_t raw[FEEDBACK_ADC_COUNT],
+    const uint32_t millivolts[FEEDBACK_ADC_COUNT])
 {
     adcError = !success;
     adcValid = success;
     if (success) {
-        adcRaw = raw;
-        adcMillivolts = millivolts;
+        for (unsigned int i = 0; i < FEEDBACK_ADC_COUNT; ++i) {
+            adcRaw[i] = raw[i];
+            adcMillivolts[i] = millivolts[i];
+        }
+    }
+}
+
+static bool terminalTakeResult(void)
+{
+    SetpointResult result;
+    if (!App_takeResult(&result)) return false;
+    setpointPending = false;
+    dacError = !result.success;
+    if (!result.success) {
+        terminalMessage("SPI transfer failed; DAC output is unconfirmed. Restart to retry.");
+    } else {
+        char message[96];
+        dacSetMillivolts = result.command.millivolts;
+        (void)snprintf(message, sizeof(message),
+            "DAC0 set to %lu.%03lu V (code %u)%s",
+            (unsigned long)(dacSetMillivolts / 1000U),
+            (unsigned long)(dacSetMillivolts % 1000U),
+            (unsigned int)result.code, result.code == 4095U ? " [maximum code]" : "");
+        terminalMessage(message);
+    }
+    return true;
+}
+
+void Terminal_task(void *arg)
+{
+    (void)arg;
+    Measurement measurement;
+    /* No spin or UART input before the control task has initialized the DAC. */
+    if (xQueueReceive(appMeasurementQueue, &measurement, portMAX_DELAY) != pdTRUE) {
+        vTaskDelete(NULL);
+        return;
+    }
+    Terminal_init(measurement.dacReady);
+    for (;;) {
+        bool redraw = terminalTakeResult();
+        redraw = Terminal_processInput() || redraw;
+        if (xQueueReceive(appMeasurementQueue, &measurement, 0) == pdTRUE) {
+            Terminal_setADC(measurement.adcValid, measurement.raw, measurement.millivolts);
+            redraw = true;
+        }
+        if (redraw) Terminal_render();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

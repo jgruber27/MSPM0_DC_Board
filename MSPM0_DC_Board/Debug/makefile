@@ -9,6 +9,7 @@ GEN_CMDS__FLAG :=
 
 ORDERED_OBJS += \
 "./ad5672r.o" \
+"./app_tasks.o" \
 "./feedback_adc.o" \
 "./main.o" \
 "./main_freertos.o" \
@@ -147,8 +148,8 @@ MSPM0_DC_Board.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS) /home/jim/workspace_ccstheia
 # Other Targets
 clean:
 	-$(RM) $(EXE_OUTPUTS__QUOTED)
-	-$(RM) "ad5672r.o" "feedback_adc.o" "main.o" "main_freertos.o" "terminal.o" "ti_drivers_config.o" "ti_msp_dl_config.o" "freertos/ticlang/startup_mspm0g351x_ticlang.o" 
-	-$(RM) "ad5672r.d" "feedback_adc.d" "main.d" "main_freertos.d" "terminal.d" "ti_drivers_config.d" "ti_msp_dl_config.d" "freertos/ticlang/startup_mspm0g351x_ticlang.d" 
+	-$(RM) "ad5672r.o" "app_tasks.o" "feedback_adc.o" "main.o" "main_freertos.o" "terminal.o" "ti_drivers_config.o" "ti_msp_dl_config.o" "freertos/ticlang/startup_mspm0g351x_ticlang.o" 
+	-$(RM) "ad5672r.d" "app_tasks.d" "feedback_adc.d" "main.d" "main_freertos.d" "terminal.d" "ti_drivers_config.d" "ti_msp_dl_config.d" "freertos/ticlang/startup_mspm0g351x_ticlang.d" 
 	-@echo ' '
 
 .PHONY: all clean dependents
