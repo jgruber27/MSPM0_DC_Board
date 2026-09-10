@@ -30,43 +30,38 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- *  ======== adcsinglechannel.c ========
- */
-/* For usleep() */
-#include <stddef.h>
-#include <stdint.h>
-#include <unistd.h>
+#include <FreeRTOS.h>
+#include <task.h>
+#include "ad5672r.h"
+#include "feedback_adc.h"
+#include "terminal.h"
 
-/* POSIX Header files */
-#include <pthread.h>
-
-/* Driver Header files */
-#include <ti/drivers/GPIO.h>
-
-/* Driver configuration */
-#include "ti_drivers_config.h"
-
-/*
- *  ======== mainThread ========
+/* One application task owns commands, DAC updates, ADC scheduling and display.
+ * UART reception remains interrupt-driven inside terminal.c.
  */
 void *mainThread(void *arg0)
 {
-    /* 1 second delay */
-    uint32_t time = 1;
+    (void)arg0;
+    /* RSTSEL is grounded; program DAC0 zero before accepting input. */
+    bool dacReady = AD5672R_init();
+    if (dacReady) dacReady = AD5672R_write(0, 0);
+    FeedbackADC_init();
+    Terminal_init(dacReady);
 
-    /* Call necessary driver init functions i.e. GPIO, Display, ADC etc. */
-    GPIO_init();
-
-    /* Configure the LED pin*/
-    GPIO_setConfig(CONFIG_GPIO_LED_0,
-        GPIO_CFG_OUT_STD | GPIO_CFG_OUT_HIGH | CONFIG_GPIO_LED_0_IOMUX);
-
-    /* Turn on user LED */
-    GPIO_write(CONFIG_GPIO_LED_0, CONFIG_LED_ON);
-
-    while (1) {
-        sleep(time);
-        GPIO_toggle(CONFIG_GPIO_LED_0);
+    TickType_t lastADC = xTaskGetTickCount();
+    for (;;) {
+        bool redraw = Terminal_processInput();
+        TickType_t now = xTaskGetTickCount();
+        if ((TickType_t)(now - lastADC) >= pdMS_TO_TICKS(1000)) {
+            lastADC += pdMS_TO_TICKS(1000);
+            uint16_t raw = 0;
+            uint32_t mv = 0;
+            bool success = FeedbackADC_read(&raw, &mv);
+            Terminal_setADC(success, raw, mv);
+            if (!success) FeedbackADC_init();
+            redraw = true;
+        }
+        if (redraw) Terminal_render();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

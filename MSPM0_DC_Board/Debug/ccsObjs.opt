@@ -1,0 +1,13 @@
+"./ad5672r.o"
+"./feedback_adc.o"
+"./main.o"
+"./main_freertos.o"
+"./terminal.o"
+"./ti_drivers_config.o"
+"./ti_msp_dl_config.o"
+"./freertos/ticlang/startup_mspm0g351x_ticlang.o"
+"../mspm0g3519.cmd"
+-l"/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/drivers/lib/ticlang/m0p/drivers_mspm0g151x_g351x.a"
+-lfreertos_builds_LP_MSPM0G3519_release_ticlang.lib
+-l"/home/jim/ti/mspm0_sdk_2_11_00_07/source/ti/driverlib/lib/ticlang/m0p/mspm0gx51x/driverlib.a"
+-llibc.a

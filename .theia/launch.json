@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MSPM0_DC_Board",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "MSPM0_DC_Board",
+                "resourceId": "/MSPM0_DC_Board"
+            }
+        }
+    ]
+}

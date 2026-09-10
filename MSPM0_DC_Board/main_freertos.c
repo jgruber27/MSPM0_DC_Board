@@ -50,8 +50,8 @@
 
 extern void *mainThread(void *arg0);
 
-/* Stack size in bytes */
-#define THREADSTACKSIZE configMINIMAL_STACK_SIZE * 4
+/* Stack size in bytes: allow room for ADC report formatting with snprintf. */
+#define THREADSTACKSIZE 2048U
 
 /* Set up the hardware ready to run this demo */
 static void prvSetupHardware(void);
